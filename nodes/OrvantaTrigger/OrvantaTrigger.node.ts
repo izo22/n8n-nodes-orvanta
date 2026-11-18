@@ -1,4 +1,5 @@
 import {
+	NodeApiError,
 	NodeConnectionTypes,
 	type IDataObject,
 	type IHookFunctions,
@@ -6,6 +7,7 @@ import {
 	type INodeTypeDescription,
 	type IWebhookFunctions,
 	type IWebhookResponseData,
+	type JsonObject,
 } from 'n8n-workflow';
 
 import { callOrvanta } from '../shared';
@@ -113,7 +115,9 @@ export class OrvantaTrigger implements INodeType {
 					} catch (error) {
 						// Already removed on Orvanta's side (404): nothing left to do.
 						// Anything else (a wrong key, the network) must surface.
-						if ((error as { httpCode?: string }).httpCode !== '404') throw error;
+						if ((error as { httpCode?: string }).httpCode !== '404') {
+							throw new NodeApiError(this.getNode(), error as JsonObject);
+						}
 					}
 					delete data.hookId;
 				}
