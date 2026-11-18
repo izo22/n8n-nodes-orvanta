@@ -110,8 +110,10 @@ export class OrvantaTrigger implements INodeType {
 				if (data.hookId !== undefined) {
 					try {
 						await callOrvanta(this, 'DELETE', `/api/v1/hooks/${data.hookId as number}`);
-					} catch {
-						// Already removed on Orvanta's side: nothing left to do.
+					} catch (error) {
+						// Already removed on Orvanta's side (404): nothing left to do.
+						// Anything else (a wrong key, the network) must surface.
+						if ((error as { httpCode?: string }).httpCode !== '404') throw error;
 					}
 					delete data.hookId;
 				}
