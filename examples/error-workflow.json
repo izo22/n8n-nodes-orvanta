@@ -1,0 +1,377 @@
+{
+  "name": "Track n8n workflow failures, alert your team and switch off failing workflows with Orvanta",
+  "nodes": [
+    {
+      "id": "f168642d-da57-42cc-bdf6-65586f94a3aa",
+      "name": "When a workflow fails",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "479661a3-5582-471d-a5fe-047f901c148d",
+      "name": "Summarize the failure",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a62aa033-9905-44ed-a226-c57bf6c72244",
+              "name": "workflow",
+              "value": "={{ $json.workflow.name }}",
+              "type": "string"
+            },
+            {
+              "id": "96659214-6422-44c2-aca9-e4a078ab1a2f",
+              "name": "workflow_id",
+              "value": "={{ $json.workflow.id }}",
+              "type": "string"
+            },
+            {
+              "id": "d5b2cc9a-a957-4e8c-953a-bdfff3b4e1a5",
+              "name": "failed_node",
+              "value": "={{ $json.execution.lastNodeExecuted || 'unknown step' }}",
+              "type": "string"
+            },
+            {
+              "id": "fec1662c-4f11-46fb-9ea0-c0221de292eb",
+              "name": "error",
+              "value": "={{ ($json.execution.error && $json.execution.error.message) || 'Unknown error' }}",
+              "type": "string"
+            },
+            {
+              "id": "ec79e3d5-35e8-41c8-8d31-2f3666e5b895",
+              "name": "error_type",
+              "value": "={{ (() => { const m = String(($json.execution.error && $json.execution.error.message) || ''); if (/\\b(401|403)\\b|unauthori|forbidden|expired|invalid[^.]{0,20}(token|credential|api key)|authentication/i.test(m)) return 'auth'; if (/\\b429\\b|rate limit|too many requests|quota/i.test(m)) return 'rate_limit'; if (/timeout|timed out|ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENOTFOUND|socket hang up/i.test(m)) return 'unreachable'; return 'error'; })() }}",
+              "type": "string"
+            },
+            {
+              "id": "6aee285a-9acf-48f2-805d-51f93a34d410",
+              "name": "execution_url",
+              "value": "={{ $json.execution.url || '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "948fea12-44a7-4685-a1aa-ca8b9bde72d4",
+      "name": "Orvanta · report failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://app.orvantahq.io/api/v1/events",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ kind: 'error', success: false, action: $json.failed_node, target: $json.workflow, error_code: $json.error_type, error_message: String($json.error).slice(0, 2000), meta: { workflow_id: $json.workflow_id, execution_url: $json.execution_url } }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      }
+    },
+    {
+      "id": "47c51ab1-5a73-4538-8fd3-72ee36f3b421",
+      "name": "Paused by Orvanta?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "58675af5-db66-4a76-9af2-dade1e34de3a",
+              "leftValue": "={{ $json.control.paused }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a2054c22-68a2-4b90-ab6b-129553283407",
+      "name": "Switch the workflow off",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [
+        900,
+        -160
+      ],
+      "parameters": {
+        "resource": "workflow",
+        "operation": "deactivate",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Summarize the failure').item.json.workflow_id }}"
+        },
+        "requestOptions": {}
+      }
+    },
+    {
+      "id": "1fa8aa23-8b23-40eb-b44c-6f010b505edf",
+      "name": "Tell the team: switched off",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1140,
+        -160
+      ],
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#alerts"
+        },
+        "text": "=:octagonal_sign: *{{ $('Summarize the failure').item.json.workflow }}* was switched off after repeated failures ({{ $('Paused by Orvanta?').item.json.control.pause_reason || 'paused in Orvanta' }}).\nLast error at *{{ $('Summarize the failure').item.json.failed_node }}*: {{ $('Summarize the failure').item.json.error }}\n{{ $('Summarize the failure').item.json.execution_url }}\nFix it, resume the agent in Orvanta, then turn the workflow back on.",
+        "otherOptions": {}
+      }
+    },
+    {
+      "id": "d1a131e3-38c1-480f-bef2-cc859fe9f60b",
+      "name": "Credential or access problem?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        900,
+        120
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "30ee20f8-1ca0-47c2-a999-2ffd5bc13c8f",
+              "leftValue": "={{ $('Summarize the failure').item.json.error_type }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "auth"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "95e95910-c447-4814-bab1-6165bda293fa",
+      "name": "Tell the team: reconnect",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1140,
+        40
+      ],
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#alerts"
+        },
+        "text": "=:key: *{{ $('Summarize the failure').item.json.workflow }}* can no longer connect at *{{ $('Summarize the failure').item.json.failed_node }}*. A credential has probably expired or lost its access.\n{{ $('Summarize the failure').item.json.error }}\n{{ $('Summarize the failure').item.json.execution_url }}\nNothing will run until it is reconnected.",
+        "otherOptions": {}
+      }
+    },
+    {
+      "id": "4e23dc16-d8b5-496a-9139-1859cb416ed1",
+      "name": "Logged: Orvanta groups and alerts",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1140,
+        240
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "54e07a48-4bb6-46cd-9226-1e67aa4f3352",
+      "name": "Template overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -660,
+        -420
+      ],
+      "parameters": {
+        "content": "## Track n8n workflow failures, alert your team and switch off a failing workflow\n\nn8n emails you one failure at a time. This error workflow sends every failure to **Orvanta**, the control center for your workflows and AI agents, so you get one view of what is breaking across all your workflows, and a real kill switch when something keeps failing.\n\n### How it works\n1. **When a workflow fails** runs whenever a watched workflow errors.\n2. **Summarize the failure** keeps the workflow, the failed step, the error, a link to the execution, and sorts the error: expired credential or access, rate limit, service unreachable, or other.\n3. **Orvanta · report failure** logs it. Orvanta groups repeated failures into one alert (on Slack, Teams, Discord or Google Chat) with the likely cause and what to do.\n4. **Paused by Orvanta?** If the agent was paused (by you, or automatically after repeated failures in strict mode), **Switch the workflow off** deactivates the failing workflow in n8n, and the team is told why.\n5. Otherwise, an **expired credential** gets an immediate Slack message, since nothing runs until it is reconnected. Other errors are left to Orvanta's grouped alerts, so you are not paged for every blip.\n\n### Setup steps\n1. Create an account at **orvantahq.io** and add an agent (source: n8n) for the workflows you watch. Copy its key.\n2. In **Orvanta · report failure**, create a **Header Auth** credential: Name `Authorization`, Value `Bearer ` followed by your key.\n3. In **Switch the workflow off**, add an **n8n API** credential (n8n → Settings → n8n API → create a key).\n4. Connect Slack in both Slack nodes and pick your alerts channel.\n5. Activate this workflow, then in each workflow to watch: **Settings → Error workflow →** select this one.\n6. In Orvanta, set the agent to *Alert, then pause after 3 failures* if you want the automatic switch-off.\n\n### Customization\nSwap Slack for Teams, Telegram or email. Tune the error patterns in **Summarize the failure**, or add a branch for rate limits (for example, retry later).",
+        "width": 560,
+        "height": 1060
+      }
+    },
+    {
+      "id": "fef55dc3-5066-4b39-bce6-34921b4febb3",
+      "name": "Section: capture",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -160
+      ],
+      "parameters": {
+        "content": "### 1. Capture and sort the failure\nKeeps what matters and tells an expired credential apart from a timeout or a rate limit.",
+        "width": 680,
+        "height": 400,
+        "color": 7
+      }
+    },
+    {
+      "id": "dcedcd97-35c6-49de-a362-60092f5c2072",
+      "name": "Section: report",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        400,
+        -160
+      ],
+      "parameters": {
+        "content": "### 2. Report to Orvanta\nOne call per failure. Orvanta answers with the agent's state, including whether it is now paused.",
+        "width": 460,
+        "height": 400,
+        "color": 7
+      }
+    },
+    {
+      "id": "7d6f5180-da67-4d46-b213-974f7843ef56",
+      "name": "Section: act",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        860,
+        -300
+      ],
+      "parameters": {
+        "content": "### 3. Act\nPaused: switch the failing workflow off and tell the team. Expired credential: tell the team now. Anything else: Orvanta's grouped alerts handle it.",
+        "width": 500,
+        "height": 680,
+        "color": 7
+      }
+    }
+  ],
+  "connections": {
+    "When a workflow fails": {
+      "main": [
+        [
+          {
+            "node": "Summarize the failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize the failure": {
+      "main": [
+        [
+          {
+            "node": "Orvanta · report failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Orvanta · report failure": {
+      "main": [
+        [
+          {
+            "node": "Paused by Orvanta?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Paused by Orvanta?": {
+      "main": [
+        [
+          {
+            "node": "Switch the workflow off",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Credential or access problem?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch the workflow off": {
+      "main": [
+        [
+          {
+            "node": "Tell the team: switched off",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Credential or access problem?": {
+      "main": [
+        [
+          {
+            "node": "Tell the team: reconnect",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Logged: Orvanta groups and alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
