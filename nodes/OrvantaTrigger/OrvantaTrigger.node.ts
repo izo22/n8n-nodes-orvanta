@@ -15,7 +15,8 @@ import { callOrvanta } from '../shared';
 /**
  * Starts a workflow when something happens in Orvanta:
  * - a human approved or declined a request made with Orvanta → Ask Permission;
- * - an agent was paused or resumed.
+ * - an agent was paused or resumed;
+ * - an alert opened: a workflow went quiet, runs that do nothing, an expired access…
  * The subscription is registered on Orvanta when the workflow is activated, and removed when it is deactivated.
  */
 export class OrvantaTrigger implements INodeType {
@@ -26,7 +27,7 @@ export class OrvantaTrigger implements INodeType {
 		group: ['trigger'],
 		version: 1,
 		subtitle: '={{$parameter["event"]}}',
-		description: 'Starts the workflow when a human decides on a request, or when an agent is paused or resumed',
+		description: 'Starts the workflow when a human decides on a request, an agent is paused or resumed, or an alert opens',
 		defaults: { name: 'Orvanta Trigger' },
 		inputs: [],
 		outputs: [NodeConnectionTypes.Main],
@@ -56,6 +57,11 @@ export class OrvantaTrigger implements INodeType {
 						value: 'agent_state',
 						description: 'The agent was paused (by a person or a guardrail) or started again',
 					},
+					{
+						name: 'Alert Opened',
+						value: 'alert',
+						description: 'Orvanta opened an alert: a workflow went quiet, runs that do nothing, an expired access, repeated failures…',
+					},
 				],
 				default: 'decision',
 			},
@@ -82,6 +88,24 @@ export class OrvantaTrigger implements INodeType {
 						default: false,
 						description: 'Whether to start only when the request was approved',
 					},
+				],
+			},
+			{
+				displayName: 'Alert Types',
+				name: 'alertKinds',
+				type: 'multiOptions',
+				default: [],
+				displayOptions: { show: { event: ['alert'] } },
+				description: 'Only these alerts. Empty: every alert.',
+				options: [
+					{ name: 'Budget Running Out', value: 'budget' },
+					{ name: 'Cost Spike', value: 'cost' },
+					{ name: 'Expired or Revoked Access', value: 'auth' },
+					{ name: 'Gone Quiet', value: 'silence' },
+					{ name: 'Rate Limited', value: 'rate_limit' },
+					{ name: 'Repeated Actions', value: 'duplicates' },
+					{ name: 'Repeated Failures', value: 'errors' },
+					{ name: 'Runs but Does Nothing', value: 'empty_runs' },
 				],
 			},
 		],
@@ -151,6 +175,11 @@ export class OrvantaTrigger implements INodeType {
 					}),
 				],
 			};
+		}
+		if (this.getNodeParameter('event') === 'alert') {
+			// One subscription for every alert; the types picked in the node are filtered here.
+			const kinds = this.getNodeParameter('alertKinds', []) as string[];
+			if (kinds.length && !kinds.includes(String(body.kind))) return {};
 		}
 		return { workflowData: [this.helpers.returnJsonArray(body)] };
 	}

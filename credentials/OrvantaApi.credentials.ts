@@ -31,7 +31,7 @@ export class OrvantaApi implements ICredentialType {
 			typeOptions: { password: true },
 			default: '',
 			description:
-				'In Orvanta, open My AI team, pick the agent this workflow is (or add one, source n8n), and copy its key. It starts with ahq_.',
+				'An agent key (ahq_…, in My AI team → the agent) for one workflow, or the workspace key (ozk_…, Connections → Zapier) to cover every workflow: Report Activity then names the agent.',
 		},
 	];
 

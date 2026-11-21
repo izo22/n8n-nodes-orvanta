@@ -7,7 +7,7 @@ import {
 	type INodeTypeDescription,
 } from 'n8n-workflow';
 
-import { callOrvanta, toCents } from '../shared';
+import { agentHeaders, callOrvanta, toCents, toCount } from '../shared';
 
 /**
  * One node, three operations:
@@ -15,7 +15,7 @@ import { callOrvanta, toCents } from '../shared';
  *   (allow, needs_approval or deny) in the item, to branch on with an If node.
  *   When a human decision is needed, the Orvanta Trigger node starts a workflow once someone decides.
  * - Get Decision: reads the current state of an approval request (for polling).
- * - Report Activity: tells Orvanta what the workflow did, or that it failed.
+ * - Report Activity: tells Orvanta what the workflow did (and how many things it handled), or that it failed.
  */
 export class Orvanta implements INodeType {
 	description: INodeTypeDescription = {
@@ -197,8 +197,26 @@ export class Orvanta implements INodeType {
 				default: {},
 				displayOptions: { show: { operation: ['reportActivity'] } },
 				options: [
+					{
+						displayName: 'Agent Name',
+						name: 'agentName',
+						type: 'string',
+						default: '',
+						placeholder: '={{ $workflow.name }}',
+						description:
+							'Only with a workspace key (ozk_…): which agent this is. Orvanta creates it the first time. Use the workflow name so each workflow is its own agent.',
+					},
 					{ displayName: 'Cost', name: 'cost', type: 'number', default: 0, typeOptions: { numberPrecision: 4 }, description: 'AI cost of this task in your currency, e.g. 0.04' },
 					{ displayName: 'Customer or Record', name: 'target', type: 'string', default: '' },
+					{
+						displayName: 'Items Handled',
+						name: 'items',
+						type: 'number',
+						typeOptions: { minValue: 0 },
+						default: 0,
+						description:
+							'How many things this run handled (invoices, leads, messages…), 0 when it found nothing. Orvanta then alerts when runs keep handling nothing while they usually do.',
+					},
 					{ displayName: 'Language', name: 'language', type: 'string', default: '', placeholder: 'en', description: 'Two-letter code of the answer' },
 					{ displayName: 'What the Agent Answered or Did', name: 'output', type: 'string', typeOptions: { rows: 3 }, default: '', description: 'Needed for the AI review' },
 					{ displayName: 'What the Agent Received', name: 'input', type: 'string', typeOptions: { rows: 3 }, default: '', description: 'For example the customer message. Needed for the AI review.' },
@@ -278,11 +296,12 @@ export class Orvanta implements INodeType {
 					action: this.getNodeParameter('activityAction', i) as string,
 					target: (options.target as string) || undefined,
 					cost_cents: toCents(options.cost),
+					items: 'items' in options ? toCount(options.items) : undefined,
 					language: (options.language as string) || undefined,
 					input: (options.input as string) || undefined,
 					output: (options.output as string) || undefined,
 					error_message: failed ? (this.getNodeParameter('errorMessage', i, '') as string) || 'Failure reported by n8n' : undefined,
-				});
+				}, agentHeaders(options.agentName));
 				const control = (answer.control ?? {}) as IDataObject;
 				out.push({
 					json: { accepted: answer.accepted ?? null, paused: control.paused === true, pause_reason: control.pause_reason ?? null },

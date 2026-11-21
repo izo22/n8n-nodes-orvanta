@@ -24,3 +24,21 @@ test('the package declares what n8n loads', () => {
 	for (const f of [...pkg.n8n.nodes, ...pkg.n8n.credentials]) assert.doesNotThrow(() => require(`../${f}`), f);
 	assert.deepEqual(Object.keys(pkg.dependencies ?? {}), [], 'verified community nodes have no runtime dependencies');
 });
+
+test('items handled: whole numbers from 0, nothing when empty or invalid', () => {
+	const { toCount } = require('../dist/nodes/shared.js');
+	assert.equal(toCount(12), 12);
+	assert.equal(toCount('7'), 7);
+	assert.equal(toCount(0), 0);
+	assert.equal(toCount(3.9), 3);
+	assert.equal(toCount(''), undefined);
+	assert.equal(toCount(-1), undefined);
+	assert.equal(toCount('abc'), undefined);
+});
+
+test('a workspace key names the agent in headers; an agent key sends none', () => {
+	const { agentHeaders } = require('../dist/nodes/shared.js');
+	assert.deepEqual(agentHeaders('Invoice reminders'), { 'X-Agent': 'Invoice%20reminders', 'X-Agent-Platform': 'n8n' });
+	assert.equal(agentHeaders(''), undefined);
+	assert.equal(agentHeaders('  '), undefined);
+});

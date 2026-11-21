@@ -1,0 +1,753 @@
+{
+  "name": "Know when a workflow goes quiet or runs without doing anything (Orvanta)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "### 2. The watcher: what is wrong, in plain words\nStarts when Orvanta opens a *Gone quiet* or *Runs but does nothing* alert, about this workflow or any other that reports to Orvanta. Looks it up in n8n by name, reads its last run, and sends one clear message.",
+        "width": 1760,
+        "height": 680,
+        "color": 7
+      },
+      "id": "8fde47c2-8b2d-4339-bc9b-afb662c30c01",
+      "name": "Section: the watcher",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 1. The job: overdue invoice reminders\nEvery run ends by telling Orvanta how many reminders it sent, even when there were none (the empty branch goes straight to the report). That count is what lets Orvanta see a run that did nothing.",
+        "width": 1340,
+        "height": 420,
+        "color": 7
+      },
+      "id": "9a6f2488-6a43-4f47-bf08-dd59a188d684",
+      "name": "Section: the job",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Know when a workflow goes quiet or runs without doing anything\n\nMost broken workflows don't throw an error. A trigger stops firing, a login expires and the \"Get rows\" step returns an empty list, the run ends green, and you find out from a customer days later.\n\nThis template pairs a real job (overdue invoice reminders) with **Orvanta**, the control center for your workflows and AI agents. Every run tells Orvanta how many invoices it handled. Orvanta learns the workflow's normal rhythm and alerts when it **goes quiet** or **keeps handling nothing**, then the second part of this template looks into n8n and tells your team what is wrong.\n\n### How it works\n**1. The job (top):** every day at 9, read the invoices sheet, keep the overdue unpaid ones, email a reminder to each customer, then **report the run to Orvanta with the number of reminders sent** (0 when there were none).\n\n**2. The watcher (bottom):** when Orvanta opens a *Gone quiet* or *Runs but does nothing* alert, it finds the workflow in n8n, reads its last run and tells the team on Slack which case it is:\n- switched off in n8n,\n- last run failed,\n- runs, but handled nothing (often an expired login),\n- switched on but not running (a schedule or an app that stopped calling it).\n\nOrvanta needs about a week of runs to learn the rhythm. A workflow that often has nothing to do is not flagged for it.\n\n### Setup steps\n1. In Orvanta (orvantahq.io): **Connections → Zapier → Create my Zapier key**. It is the workspace key (starts with `ozk_`). Create an **Orvanta API** credential with it, used by both Orvanta nodes. The workflow appears in Orvanta under its own name after its first run.\n2. **Get invoices**: connect Google Sheets and pick a sheet with the columns `invoice`, `customer`, `email`, `amount`, `due_date`, `status`.\n3. **Send the reminder**: connect Gmail.\n4. **Find the workflow in n8n** and **Its last run**: add an **n8n API** credential (Settings → n8n API). The public API is not on every plan.\n5. **Tell the team**: connect Slack and pick your channel.\n6. Activate the workflow.\n\n### Use it on your own workflows\nCopy the **Orvanta · report the run** node to the end of any workflow, with the number of things it handled. The watcher already covers them: it looks each one up by name.",
+        "width": 680,
+        "height": 1180,
+        "color": 4
+      },
+      "id": "19db9cbf-c088-4fd2-9771-cf0908b1b473",
+      "name": "Template overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -760,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "d859f761-73d6-446c-a47d-533d713e526d",
+      "name": "Every day at 9",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Invoices",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "81d2bd64-79a2-41bd-963f-4d40f3c3dbfe",
+      "name": "Get invoices",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        220,
+        0
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f45265f6-4e5f-4c31-a574-8620bed2e8a2",
+              "leftValue": "={{ String($json.status).toLowerCase() }}",
+              "rightValue": "paid",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "id": "9fb51ef4-0787-41db-9dc4-71c965b3e975",
+              "leftValue": "={{ $json.due_date }}",
+              "rightValue": "={{ $today }}",
+              "operator": {
+                "type": "dateTime",
+                "operation": "before"
+              }
+            },
+            {
+              "id": "64b52754-6614-48ce-b5fc-879fefe7c1fc",
+              "leftValue": "={{ $json.email }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0f1420a5-287f-4d99-bbf6-b01442871220",
+      "name": "Overdue and unpaid",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        0
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b6f4b804-1196-41b8-9598-c1e75d3c0540",
+              "leftValue": "={{ $json.email }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "96774cad-c129-4eca-a6dc-3b205936e005",
+      "name": "Anyone to remind?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "=Reminder: invoice {{ $json.invoice }} is overdue",
+        "emailType": "text",
+        "message": "=Hello {{ $json.customer }},\n\nA quick reminder that invoice {{ $json.invoice }} ({{ $json.amount }}) was due on {{ $json.due_date }}. If you have already paid, please ignore this message.\n\nThank you!",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "2c99fbd7-612b-47cd-9c79-3bfdbc1c457e",
+      "name": "Send the reminder",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        900,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "reportActivity",
+        "activityAction": "invoices.remind",
+        "status": "success",
+        "activityOptions": {
+          "agentName": "={{ $workflow.name }}",
+          "items": "={{ $('Overdue and unpaid').all().filter(i => i.json.email).length }}"
+        }
+      },
+      "id": "1421f377-a8ee-4c6c-b7c0-db27b8dcd168",
+      "name": "Orvanta · report the run",
+      "type": "n8n-nodes-orvanta.orvanta",
+      "typeVersion": 1,
+      "position": [
+        1140,
+        0
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "event": "alert",
+        "alertKinds": [
+          "silence",
+          "empty_runs"
+        ]
+      },
+      "id": "05df356f-c15c-42a0-8c8c-2720dd90e510",
+      "name": "Orvanta · workflow quiet or doing nothing",
+      "type": "n8n-nodes-orvanta.orvantaTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "workflow",
+        "operation": "getAll",
+        "returnAll": false,
+        "limit": 1,
+        "filters": {
+          "name": "={{ $json.agent_name }}"
+        },
+        "requestOptions": {}
+      },
+      "id": "007523f5-abb8-481a-9247-05b2d676a417",
+      "name": "Find the workflow in n8n",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [
+        240,
+        520
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "72a62b4b-7d50-46de-92d1-1601441a066f",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a3e998c8-eff3-4680-9bd7-c8d56c25f446",
+      "name": "Is it an n8n workflow?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "execution",
+        "operation": "getAll",
+        "returnAll": false,
+        "limit": 1,
+        "filters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "={{ $json.id }}",
+            "mode": "id"
+          }
+        },
+        "options": {},
+        "requestOptions": {}
+      },
+      "id": "60bdc70c-951c-42a6-a259-4a7166705f77",
+      "name": "Its last run",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [
+        720,
+        440
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "0fbd5930-b86c-4bc5-9ebb-5cde803c529a",
+                    "leftValue": "={{ $('Find the workflow in n8n').item.json.active }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "false",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Switched off"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "fa390326-0906-4a00-bbe8-1d42ef1997a5",
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "error",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Last run failed"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "19ce6c75-3907-4eda-b616-6901245890b3",
+                    "leftValue": "={{ $('Orvanta · workflow quiet or doing nothing').item.json.kind }}",
+                    "rightValue": "empty_runs",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Runs but does nothing"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Not running"
+        }
+      },
+      "id": "c3bda2ea-431f-4f8c-af93-a752c03e0e78",
+      "name": "What's wrong?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        960,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b9998ac1-98e1-4c91-b26f-6522be8e9d33",
+              "name": "message",
+              "value": "=:rotating_light: *{{ $('Orvanta · workflow quiet or doing nothing').item.json.agent_name }}*: the workflow is *switched off in n8n*, so nothing runs. Switch it back on if that was not on purpose.\nOrvanta: {{ $('Orvanta · workflow quiet or doing nothing').item.json.title }}{{ $('Orvanta · workflow quiet or doing nothing').item.json.alert_url ? '\\n' + $('Orvanta · workflow quiet or doing nothing').item.json.alert_url : '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2fbeb4dd-7845-4aae-a972-a58beedce9f1",
+      "name": "Message: switched off",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1220,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c64aa66c-f08a-4bd5-9412-74a991b2ca25",
+              "name": "message",
+              "value": "=:rotating_light: *{{ $('Orvanta · workflow quiet or doing nothing').item.json.agent_name }}*: its last run *failed* ({{ $json.stoppedAt ? new Date($json.stoppedAt).toLocaleString() : 'recently' }}). Open it to see the error: {{ $json.id }}\nOrvanta: {{ $('Orvanta · workflow quiet or doing nothing').item.json.title }}{{ $('Orvanta · workflow quiet or doing nothing').item.json.alert_url ? '\\n' + $('Orvanta · workflow quiet or doing nothing').item.json.alert_url : '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f2c19939-8d14-4e43-9aa9-9c587f40a71e",
+      "name": "Message: last run failed",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1220,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5e40c619-6311-4d0c-b229-7581562fb59e",
+              "name": "message",
+              "value": "=:rotating_light: *{{ $('Orvanta · workflow quiet or doing nothing').item.json.agent_name }}*: it still runs, but its last runs *handled nothing* while it usually does. Check the credential of its first step (an expired login often returns an empty list) and its filters.\nOrvanta: {{ $('Orvanta · workflow quiet or doing nothing').item.json.title }}{{ $('Orvanta · workflow quiet or doing nothing').item.json.alert_url ? '\\n' + $('Orvanta · workflow quiet or doing nothing').item.json.alert_url : '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "604bf68f-d547-4a5a-8dc1-1de92581739e",
+      "name": "Message: does nothing",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1220,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "99684e27-dd21-487b-9145-7f61ed766e8e",
+              "name": "message",
+              "value": "=:rotating_light: *{{ $('Orvanta · workflow quiet or doing nothing').item.json.agent_name }}*: it is switched on, but *has not run* since {{ $('Orvanta · workflow quiet or doing nothing').item.json.last_activity_at ? new Date($('Orvanta · workflow quiet or doing nothing').item.json.last_activity_at).toLocaleString() : 'a while' }}. Check its trigger: the schedule, or the app that is supposed to call its webhook.\nOrvanta: {{ $('Orvanta · workflow quiet or doing nothing').item.json.title }}{{ $('Orvanta · workflow quiet or doing nothing').item.json.alert_url ? '\\n' + $('Orvanta · workflow quiet or doing nothing').item.json.alert_url : '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "887db585-3ea5-400b-8ec9-b9da628a13ee",
+      "name": "Message: not running",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1220,
+        680
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "eaf0a6b7-d047-428e-a142-66ec261e19ab",
+              "name": "message",
+              "value": "=:rotating_light: *{{ $('Orvanta · workflow quiet or doing nothing').item.json.agent_name }}*: {{ $('Orvanta · workflow quiet or doing nothing').item.json.title }}. It is not a workflow of this n8n, open it in Orvanta to look into it.{{ $('Orvanta · workflow quiet or doing nothing').item.json.alert_url ? '\\n' + $('Orvanta · workflow quiet or doing nothing').item.json.alert_url : '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "47b77cd3-a01f-45d9-83fb-d13908b5b3f1",
+      "name": "Message: outside n8n",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        720,
+        760
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "#alerts",
+          "mode": "name"
+        },
+        "text": "={{ $json.message }}",
+        "otherOptions": {}
+      },
+      "id": "1c487669-d128-447d-a5c5-47882b0a0f55",
+      "name": "Tell the team",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1480,
+        520
+      ]
+    }
+  ],
+  "connections": {
+    "Every day at 9": {
+      "main": [
+        [
+          {
+            "node": "Get invoices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get invoices": {
+      "main": [
+        [
+          {
+            "node": "Overdue and unpaid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Overdue and unpaid": {
+      "main": [
+        [
+          {
+            "node": "Anyone to remind?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anyone to remind?": {
+      "main": [
+        [
+          {
+            "node": "Send the reminder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Orvanta · report the run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send the reminder": {
+      "main": [
+        [
+          {
+            "node": "Orvanta · report the run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Orvanta · workflow quiet or doing nothing": {
+      "main": [
+        [
+          {
+            "node": "Find the workflow in n8n",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find the workflow in n8n": {
+      "main": [
+        [
+          {
+            "node": "Is it an n8n workflow?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is it an n8n workflow?": {
+      "main": [
+        [
+          {
+            "node": "Its last run",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Message: outside n8n",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Its last run": {
+      "main": [
+        [
+          {
+            "node": "What's wrong?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "What's wrong?": {
+      "main": [
+        [
+          {
+            "node": "Message: switched off",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Message: last run failed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Message: does nothing",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Message: not running",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message: switched off": {
+      "main": [
+        [
+          {
+            "node": "Tell the team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message: last run failed": {
+      "main": [
+        [
+          {
+            "node": "Tell the team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message: does nothing": {
+      "main": [
+        [
+          {
+            "node": "Tell the team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message: not running": {
+      "main": [
+        [
+          {
+            "node": "Tell the team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message: outside n8n": {
+      "main": [
+        [
+          {
+            "node": "Tell the team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

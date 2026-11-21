@@ -9,8 +9,8 @@ This package adds two nodes:
 - **Orvanta**, with three operations:
   - **Ask Permission**: before a risky step (send a quote, issue a refund, pay a supplier, reply to a customer), checks the action against your Orvanta rules and returns the answer right away in `orvanta.decision`: `allow`, `needs_approval` or `deny`.
   - **Get Decision**: reads whether a request was approved, declined, or is still pending.
-  - **Report Activity**: tells Orvanta what the workflow did (success or failure, cost, answer), for the dashboard, alerts and AI review.
-- **Orvanta Trigger**: starts a workflow when someone approves or declines a request in Orvanta (or in Slack/Teams), or when an agent is paused or resumed.
+  - **Report Activity**: tells Orvanta what the workflow did (success or failure, cost, answer, and how many things it handled), for the dashboard, alerts and AI review. With *Items Handled*, Orvanta also alerts when runs keep handling nothing while they usually do.
+- **Orvanta Trigger**: starts a workflow when someone approves or declines a request in Orvanta (or in Slack/Teams), when an agent is paused or resumed, or when an alert opens (a workflow gone quiet, runs that do nothing, an expired access…).
 
 Rules are written in plain English in Orvanta, for example *"Over $5,000, I approve"*, *"No customer email between 10 pm and 7 am"* or *"Never promise a discount over 10%"*. Every decision is logged with who approved it and when.
 
@@ -23,8 +23,13 @@ See the [n8n community nodes documentation](https://docs.n8n.io/integrations/com
 ## Credentials
 
 1. Create a free account at [orvantahq.io](https://orvantahq.io).
-2. Add an agent for this workflow (source: n8n) and copy its key (`ahq_…`).
+2. Either add an agent for this workflow (source: n8n) and copy its key (`ahq_…`), or use the **workspace key** (`ozk_…`, Connections → Zapier → Create my Zapier key) to cover every workflow with one credential: Report Activity then names the agent (*Agent Name*, for example `{{ $workflow.name }}`), and Orvanta creates it on the first run.
 3. In n8n, create an **Orvanta API** credential: paste the key. Keep the URL `https://app.orvantahq.io` unless you run your own Orvanta.
+
+## Example workflows
+
+- [Track failures, alert your team and switch off a failing workflow](examples/error-workflow.json): an error workflow for all your workflows.
+- [Know when a workflow goes quiet or runs without doing anything](examples/silent-workflow.json): overdue invoice reminders that report each run, and a watcher that tells the team what is wrong when Orvanta opens an alert.
 
 ## Usage
 
